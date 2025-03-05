@@ -450,22 +450,72 @@ class Tetris {
         });
 
         // 移动端控制
-        if (this.leftBtn) {
-            this.leftBtn.addEventListener('click', () => {
+        // 左右移动按钮的长按处理
+        const setupMoveButton = (button, moveFunction) => {
+            let moveInterval = null;
+            let isPressing = false;
+
+            const startMoving = () => {
                 if (!this.gameOver && !this.isPaused) {
-                    this.moveLeft();
+                    isPressing = true;
+                    moveFunction.call(this);
                     this.draw();
+                    
+                    setTimeout(() => {
+                        if (isPressing) {
+                            moveInterval = setInterval(() => {
+                                if (!this.gameOver && !this.isPaused) {
+                                    moveFunction.call(this);
+                                    this.draw();
+                                } else {
+                                    clearInterval(moveInterval);
+                                }
+                            }, 100);
+                        }
+                    }, 300);
                 }
+            };
+
+            const stopMoving = () => {
+                isPressing = false;
+                clearInterval(moveInterval);
+                moveInterval = null;
+            };
+
+            button.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startMoving();
             });
+
+            button.addEventListener('touchend', () => {
+                stopMoving();
+            });
+
+            button.addEventListener('touchcancel', () => {
+                stopMoving();
+            });
+
+            // 桌面端支持
+            button.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                startMoving();
+            });
+
+            button.addEventListener('mouseup', () => {
+                stopMoving();
+            });
+
+            button.addEventListener('mouseleave', () => {
+                stopMoving();
+            });
+        };
+
+        if (this.leftBtn) {
+            setupMoveButton(this.leftBtn, this.moveLeft);
         }
 
         if (this.rightBtn) {
-            this.rightBtn.addEventListener('click', () => {
-                if (!this.gameOver && !this.isPaused) {
-                    this.moveRight();
-                    this.draw();
-                }
-            });
+            setupMoveButton(this.rightBtn, this.moveRight);
         }
 
         if (this.rotateBtn) {
