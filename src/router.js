@@ -22,7 +22,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHashHistory('/games/'),
+  history: createWebHashHistory('./'),
   routes
 })
 
