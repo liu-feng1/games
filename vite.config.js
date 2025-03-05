@@ -6,7 +6,7 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [vue()],
   // 确保使用相对路径
-  base: process.env.NODE_ENV === "production" ? "/games/" : "",
+  base: '/games/',
   build: {
     assetsInlineLimit: 0,
     // 确保资源路径正确
