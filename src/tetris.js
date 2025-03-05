@@ -212,6 +212,10 @@ class Tetris {
         this.dropBtn = document.getElementById('dropBtn');
         this.hardDropBtn = document.getElementById('hardDropBtn');
         
+        // 用于跟踪长按状态
+        this.dropBtnPressed = false;
+        this.dropInterval = null;
+        
         // 初始化游戏板
         this.boardElement.style.display = 'grid';
         const cellSize = window.matchMedia('(max-width: 768px)').matches ? '6vw' : '30px';
@@ -474,11 +478,89 @@ class Tetris {
         }
 
         if (this.dropBtn) {
-            this.dropBtn.addEventListener('click', () => {
+            // 触摸开始事件
+            this.dropBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
                 if (!this.gameOver && !this.isPaused) {
-                    while (this.moveDown()) {}
-                    this.draw();
+                    this.dropBtnPressed = true;
+                    // 设置定时器，延迟300ms后开始快速下落
+                    setTimeout(() => {
+                        if (this.dropBtnPressed) {
+                            this.dropInterval = setInterval(() => {
+                                if (!this.gameOver && !this.isPaused) {
+                                    this.moveDown();
+                                    this.draw();
+                                } else {
+                                    clearInterval(this.dropInterval);
+                                }
+                            }, 50);
+                        }
+                    }, 300);
                 }
+            });
+
+            // 触摸结束事件
+            this.dropBtn.addEventListener('touchend', () => {
+                if (!this.gameOver && !this.isPaused) {
+                    if (this.dropBtnPressed) {
+                        // 如果按下时间小于300ms，执行直接落下
+                        if (!this.dropInterval) {
+                            while (this.moveDown()) {}
+                            this.draw();
+                        }
+                        // 清理定时器和状态
+                        clearInterval(this.dropInterval);
+                        this.dropInterval = null;
+                        this.dropBtnPressed = false;
+                    }
+                }
+            });
+
+            // 触摸取消事件
+            this.dropBtn.addEventListener('touchcancel', () => {
+                clearInterval(this.dropInterval);
+                this.dropInterval = null;
+                this.dropBtnPressed = false;
+            });
+
+            // 鼠标事件（用于桌面端测试）
+            this.dropBtn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                if (!this.gameOver && !this.isPaused) {
+                    this.dropBtnPressed = true;
+                    setTimeout(() => {
+                        if (this.dropBtnPressed) {
+                            this.dropInterval = setInterval(() => {
+                                if (!this.gameOver && !this.isPaused) {
+                                    this.moveDown();
+                                    this.draw();
+                                } else {
+                                    clearInterval(this.dropInterval);
+                                }
+                            }, 50);
+                        }
+                    }, 300);
+                }
+            });
+
+            this.dropBtn.addEventListener('mouseup', () => {
+                if (!this.gameOver && !this.isPaused) {
+                    if (this.dropBtnPressed) {
+                        if (!this.dropInterval) {
+                            while (this.moveDown()) {}
+                            this.draw();
+                        }
+                        clearInterval(this.dropInterval);
+                        this.dropInterval = null;
+                        this.dropBtnPressed = false;
+                    }
+                }
+            });
+
+            this.dropBtn.addEventListener('mouseleave', () => {
+                clearInterval(this.dropInterval);
+                this.dropInterval = null;
+                this.dropBtnPressed = false;
             });
         }
 
