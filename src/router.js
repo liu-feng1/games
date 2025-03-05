@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import Tetris from './views/Tetris.vue'
 import GameList from './views/GameList.vue'
 import Game2048 from './views/Game2048.vue'
@@ -22,7 +22,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHashHistory(process.env.NODE_ENV === "production" ? "/games/" : ""),
   routes
 })
 

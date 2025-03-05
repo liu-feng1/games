@@ -8,13 +8,13 @@ const games = [
     id: 'tetris',
     title: '俄罗斯方块',
     description: '经典的俄罗斯方块游戏，使用键盘或触摸控制方块下落和旋转。',
-    thumbnail: '/src/assets/tetris.png'
+    thumbnail: '/img/tetris.png'
   },
   {
     id: '2048',
     title: '2048',
     description: '益智数字游戏，通过滑动合并相同的数字，目标是得到2048。',
-    thumbnail: '/src/assets/2048.png'
+    thumbnail: '/img/2048.png'
   }
   // 后续可以添加更多游戏
 ]
