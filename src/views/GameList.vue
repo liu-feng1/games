@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router'
 import tetrisPng from '../assets/tetris.png'
 import game2048Png from '../assets/2048.png'
+import threePng from '../assets/three.png'
 
 const router = useRouter()
 
@@ -17,6 +18,12 @@ const games = [
     title: '2048',
     description: '益智数字游戏，通过滑动合并相同的数字，目标是得到2048。',
     thumbnail: game2048Png
+  },
+  {
+    id: 'three',
+    title: '3D小游戏',
+    description: '跑起来',
+    thumbnail: threePng
   }
   // 后续可以添加更多游戏
 ]
