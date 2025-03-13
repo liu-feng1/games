@@ -1,12 +1,19 @@
 <template>
   <div class="container">
     <div id="scene-container"></div>
+    <!-- 加载提示蒙层 -->
+    <div class="loading-overlay" v-if="isLoading">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">模型加载中...</div>
+      </div>
+    </div>
     <div class="joystick-container" ref="joystickContainer">
       <div class="joystick-base">
         <div class="joystick-handle" ref="joystickHandle"></div>
       </div>
     </div>
-    <div class="controls" :class="{ expanded: isControlsExpanded }">
+    <div class="controls" :class="{ expanded: isControlsExpanded }" v-show="false">
       <button class="toggle-btn" @click="toggleControls">
         {{ isControlsExpanded ? "收起" : "展开" }}
       </button>
@@ -341,8 +348,14 @@ let pathPoints = [];
 let currentPathIndex = 0;
 let isFollowingPath = false;
 
+// 添加加载状态变量
+const isLoading = ref(true);
+
 // 初始化场景
 function init() {
+  // 创建场景前先显示加载提示
+  isLoading.value = true;
+  
   // 创建场景
   scene = new THREE.Scene();
 
@@ -386,16 +399,26 @@ function init() {
   renderer.toneMappingExposure = exposure.value;
   container.appendChild(renderer.domElement);
 
-  // 添加轨道控制器
+  // 创建相机控制器
   controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 1, 0);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
-  controls.screenSpacePanning = false;
-  controls.maxPolarAngle = Math.PI / 2.5; // 限制相机视角，防止看到地面以下
+  
+  // 确保没有限制垂直旋转
+  controls.minPolarAngle = 0; // 允许向上看到天空
+  controls.maxPolarAngle = Math.PI; // 允许向下看到地面
+  
+  // 设置缩放限制
+  controls.minDistance = 2; // 最小缩放距离
+  controls.maxDistance = 20; // 最大缩放距离
+  
+  // 确保启用了所有控制
   controls.enableZoom = true;
-  controls.minDistance = 3;
-  controls.maxDistance = 10; // 减小最大缩放距离
+  controls.enableRotate = true;
+  controls.enablePan = true;
+  
+  // 设置初始目标点
+  controls.target.set(0, 1, 0);
   controls.update();
 
   // 添加光源
@@ -461,27 +484,34 @@ function addLights() {
 
 // 创建人物（使用GLTF模型）
 function createCharacter() {
-  const loader = new GLTFLoader();
-
-  // 加载进度回调
+  // 创建加载管理器
   const loadingManager = new THREE.LoadingManager();
+  
   loadingManager.onProgress = function (url, loaded, total) {
     console.log("模型加载进度:", Math.round((loaded / total) * 100) + "%");
   };
+  
+  loadingManager.onLoad = function () {
+    // 所有资源加载完成
+    setTimeout(() => {
+      isLoading.value = false;
+    }, 500);
+  };
+  
+  // 创建加载器时传入loadingManager
+  const loader = new GLTFLoader(loadingManager);
 
   // 加载RobotExpressive模型
   loader.setPath("./gltf/");
   loader.load(
-    // "RobotExpressive/RobotExpressive.glb",
     "goodboyrun.glb",
     function (gltf) {
       character = gltf.scene;
-      character.scale.set(1, 1, 1); // 调整模型大小为原来的一半
-      character.position.set(0, 0.6, 0); // 将模型放置在地面上
+      character.scale.set(1, 1, 1);
+      character.position.set(0, 0.6, 0);
       character.traverse(function (node) {
         if (node.isMesh) {
           node.castShadow = true;
-          // 确保材质使用中性环境，移除可能的环境贴图影响
           if (node.material) {
             if (Array.isArray(node.material)) {
               node.material.forEach((mat) => {
@@ -512,6 +542,7 @@ function createCharacter() {
     undefined,
     function (error) {
       console.error("模型加载出错:", error);
+      isLoading.value = false; // 加载出错时也要关闭加载提示
     }
   );
 }
@@ -531,7 +562,7 @@ function setAction(action) {
   
   currentAction = action;
   isFollowingPath = action === 'walk' || action === 'run' || action === 'armature';
-  
+
   // 根据动作设置移动速度
   switch (action) {
     case 'walk':
@@ -548,7 +579,7 @@ function setAction(action) {
       isFollowingPath = false;
       break;
   }
-  
+
   // 映射动作名称到模型的动画名称
   let clipName;
   switch (action) {
@@ -576,18 +607,18 @@ function setAction(action) {
     console.warn(`动画 ${clipName} 不存在，使用默认动画`);
     return;
   }
-  
+
   // 淡出之前的动作
   if (activeAction) {
     activeAction.fadeOut(0.5);
   }
-  
+
   // 创建新的动作并播放
   const animAction = mixer.clipAction(clip);
   animAction.reset();
   animAction.fadeIn(0.5);
   animAction.play();
-  
+
   // 更新当前活动动作
   activeAction = animAction;
 }
@@ -627,10 +658,10 @@ function updateCharacterColor() {
   }
 }
 
-// 初始化摇杆控制
+// 修复摇杆控制功能
 function initJoystick() {
   const container = joystickContainer.value;
-  const handle = joystickHandle.value;
+  const handle = container.querySelector('.joystick-handle');
   
   if (!container || !handle) return;
   
@@ -723,7 +754,7 @@ function updateJoystickPosition() {
   joystickHandle.value.style.transform = `translate(${joystickState.handleX - joystickState.baseX}px, ${joystickState.handleY - joystickState.baseY}px)`;
 }
 
-// 更新角色移动
+// 更新角色移动 - 修改为使用相机方向
 function updateCharacterMovement() {
   if (!character) return;
   
@@ -735,8 +766,27 @@ function updateCharacterMovement() {
     // 设置移动速度（根据摇杆偏移量调整）
     moveSpeed = moveDistance / joystickState.maxDistance * 0.02;
     
-    // 设置移动方向（Z轴对应前后，X轴对应左右）
-    moveDirection.set(joystickState.moveX, 0, joystickState.moveY).normalize();
+    // 创建一个表示摇杆方向的向量（屏幕空间）
+    const joystickDirection = new THREE.Vector2(joystickState.moveX, -joystickState.moveY).normalize();
+    
+    // 创建一个表示"向前"的三维向量
+    const forward = new THREE.Vector3(0, 0, -1);
+    
+    // 将这个向量应用相机的旋转
+    forward.applyQuaternion(camera.quaternion);
+    forward.y = 0; // 我们只关心水平方向
+    forward.normalize();
+    
+    // 创建一个表示"向右"的三维向量
+    const right = new THREE.Vector3(1, 0, 0);
+    right.applyQuaternion(camera.quaternion);
+    right.y = 0; // 我们只关心水平方向
+    right.normalize();
+    
+    // 根据摇杆方向计算最终移动方向
+    moveDirection.copy(forward.multiplyScalar(joystickDirection.y));
+    moveDirection.add(right.multiplyScalar(joystickDirection.x));
+    moveDirection.normalize();
     
     // 设置角色朝向
     const targetAngle = Math.atan2(moveDirection.x, moveDirection.z);
@@ -981,21 +1031,37 @@ function showPointsAnimation(points, position) {
   animate();
 }
 
-// 修改createStartText函数
+// 修改createStartText函数，优化文字样式
 function createStartText() {
   // 创建画布
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 128;
+  canvas.width = 512;
+  canvas.height = 256;
   const context = canvas.getContext('2d');
   
+  // 设置渐变背景
+  const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, '#4CAF50');
+  gradient.addColorStop(1, '#45a049');
+  
   // 设置文本样式
-  context.fillStyle = '#00ff00';
-  context.font = 'bold 48px Arial';
+  context.fillStyle = gradient;
+  context.font = 'bold 72px Arial';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   
-  // 绘制水平文本 - 开始游戏四个字
+  // 添加文字阴影
+  context.shadowColor = 'rgba(0, 0, 0, 0.5)';
+  context.shadowBlur = 15;
+  context.shadowOffsetX = 5;
+  context.shadowOffsetY = 5;
+  
+  // 绘制文字描边
+  context.strokeStyle = '#ffffff';
+  context.lineWidth = 8;
+  context.strokeText('开始游戏', canvas.width / 2, canvas.height / 2);
+  
+  // 绘制文字
   context.fillText('开始游戏', canvas.width / 2, canvas.height / 2);
   
   // 创建纹理
@@ -1006,14 +1072,36 @@ function createStartText() {
     side: THREE.DoubleSide
   });
   
-  // 创建平面几何体 - 水平文字但垂直立在地面上
-  const geometry = new THREE.PlaneGeometry(2, 1);
+  // 创建平面几何体
+  const geometry = new THREE.PlaneGeometry(3, 1.5);
   startText = new THREE.Mesh(geometry, material);
   
-  // 放置在角色前方一点点
-  startText.position.set(0, 1, -2); // x=0(与角色同一水平线), y=1(抬高一点), z=-2(角色前方)
+  // 放置在角色前方
+  startText.position.set(0, 1.2, -2);
   startText.name = "startText";
+  
+  // 添加发光效果
+  const glowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x4CAF50,
+    transparent: true,
+    opacity: 0.3,
+    side: THREE.DoubleSide
+  });
+  const glowGeometry = new THREE.PlaneGeometry(3.2, 1.7);
+  const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+  glow.position.set(0, 0, -0.1);
+  startText.add(glow);
+  
   scene.add(startText);
+  
+  // 添加动画效果
+  const animate = () => {
+    if (!startText) return;
+    startText.rotation.y = Math.sin(Date.now() * 0.001) * 0.1;
+    startText.position.y = 1.2 + Math.sin(Date.now() * 0.002) * 0.1;
+    requestAnimationFrame(animate);
+  };
+  animate();
 }
 
 // 开始游戏倒计时
@@ -1425,23 +1513,9 @@ function animate() {
       moveDirection.clone().multiplyScalar(moveSpeed)
     );
     
-    // 边界限制 - 确保不会跑出屏幕
+    // 边界限制
     newPosition.x = THREE.MathUtils.clamp(newPosition.x, -moveBoundary, moveBoundary);
     newPosition.z = THREE.MathUtils.clamp(newPosition.z, -moveBoundary, moveBoundary);
-    
-    // 更新相机位置，确保角色始终在视野内
-    if (camera) {
-      // 计算相机目标位置
-      const cameraTargetX = newPosition.x * 0.5; // 相机只跟随一半的距离，保持平滑
-      const cameraTargetZ = newPosition.z * 0.5 + 5; // 保持在角色后方
-      
-      // 平滑移动相机
-      camera.position.x += (cameraTargetX - camera.position.x) * 0.05;
-      camera.position.z += (cameraTargetZ - camera.position.z) * 0.05;
-      
-      // 更新控制器目标
-      controls.target.set(newPosition.x, 1, newPosition.z);
-    }
     
     character.position.copy(newPosition);
     
@@ -1705,5 +1779,45 @@ input[type="color"] {
     width: 50px;
     height: 50px;
   }
+}
+
+/* 添加加载提示样式 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.loading-content {
+  text-align: center;
+  color: white;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #f3f3f3;
+  border-top: 5px solid #4CAF50;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+.loading-text {
+  font-size: 24px;
+  font-weight: bold;
+  text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>

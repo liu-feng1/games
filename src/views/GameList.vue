@@ -22,7 +22,7 @@ const games = [
   {
     id: 'three',
     title: '3D小游戏',
-    description: '跑起来',
+    description: '控制小南南加金币，注意躲避炸弹哦',
     thumbnail: threePng
   }
   // 后续可以添加更多游戏
