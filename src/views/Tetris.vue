@@ -326,10 +326,15 @@ export default {
       const setupMoveButton = (button, moveFunction) => {
         let moveInterval = null;
         let isPressing = false;
+        let hasMoved = false;
 
-        const startMoving = () => {
-          if (!this.gameOver && !this.isPaused) {
+        const startMoving = (e) => {
+          e.preventDefault();
+          
+          if (!this.gameOver && !this.isPaused && !hasMoved) {
             isPressing = true;
+            hasMoved = true;
+            
             moveFunction.call(this);
             this.draw();
             
@@ -348,13 +353,14 @@ export default {
 
         const stopMoving = () => {
           isPressing = false;
+          hasMoved = false;
           if (moveInterval) {
             clearInterval(moveInterval);
             moveInterval = null;
           }
         };
 
-        button.addEventListener('touchstart', startMoving);
+        button.addEventListener('touchstart', startMoving, { passive: false });
         button.addEventListener('touchend', stopMoving);
         button.addEventListener('mousedown', startMoving);
         button.addEventListener('mouseup', stopMoving);
@@ -365,7 +371,8 @@ export default {
       setupMoveButton(document.getElementById('rightBtn'), this.moveRight);
 
       const rotateBtn = document.getElementById('rotateBtn');
-      rotateBtn.addEventListener('click', () => {
+      rotateBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         if (!this.gameOver && !this.isPaused) {
           this.rotate();
           this.draw();
@@ -373,13 +380,14 @@ export default {
       });
 
       const dropBtn = document.getElementById('dropBtn');
-      dropBtn.addEventListener('touchstart', () => {
+      dropBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
         if (!this.gameOver && !this.isPaused) {
           this.dropBtnPressed = true;
           while (this.moveDown()) {}
           this.draw();
         }
-      });
+      }, { passive: false });
 
       dropBtn.addEventListener('touchend', () => {
         this.dropBtnPressed = false;
@@ -456,6 +464,7 @@ export default {
 <style scoped>
 body {
   touch-action: none;
+  user-select: none; /* 防止文本选择 */
 }
 
 .game-container {
@@ -463,6 +472,7 @@ body {
   border: 8px solid #4a5a4a;
   border-radius: 10px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  user-select: none; /* 防止文本选择 */
 }
 
 .game-main {
@@ -571,6 +581,8 @@ body {
   justify-content: center;
   touch-action: manipulation;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  user-select: none; /* 防止文本选择 */
+  -webkit-tap-highlight-color: transparent; /* 移除点击高亮 */
 }
 
 #dropBtn {
