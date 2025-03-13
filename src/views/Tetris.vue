@@ -326,13 +326,22 @@ export default {
       const setupMoveButton = (button, moveFunction) => {
         let moveInterval = null;
         let isPressing = false;
+        let hasMoved = false;
 
-        const startMoving = () => {
+        const startMoving = (e) => {
+          // 阻止默认行为，防止文字选择
+          e.preventDefault();
+          
           if (!this.gameOver && !this.isPaused) {
             isPressing = true;
+            hasMoved = false;
+            
+            // 立即执行一次移动
             moveFunction.call(this);
             this.draw();
+            hasMoved = true;
             
+            // 设置延迟后的连续移动
             setTimeout(() => {
               if (isPressing) {
                 moveInterval = setInterval(() => {
@@ -354,7 +363,7 @@ export default {
           }
         };
 
-        button.addEventListener('touchstart', startMoving);
+        button.addEventListener('touchstart', startMoving, { passive: false });
         button.addEventListener('touchend', stopMoving);
         button.addEventListener('mousedown', startMoving);
         button.addEventListener('mouseup', stopMoving);
@@ -365,21 +374,28 @@ export default {
       setupMoveButton(document.getElementById('rightBtn'), this.moveRight);
 
       const rotateBtn = document.getElementById('rotateBtn');
-      rotateBtn.addEventListener('click', () => {
+      rotateBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         if (!this.gameOver && !this.isPaused) {
           this.rotate();
           this.draw();
         }
       });
+      
+      // 防止旋转按钮的默认行为
+      rotateBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+      }, { passive: false });
 
       const dropBtn = document.getElementById('dropBtn');
-      dropBtn.addEventListener('touchstart', () => {
+      dropBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
         if (!this.gameOver && !this.isPaused) {
           this.dropBtnPressed = true;
           while (this.moveDown()) {}
           this.draw();
         }
-      });
+      }, { passive: false });
 
       dropBtn.addEventListener('touchend', () => {
         this.dropBtnPressed = false;
@@ -463,6 +479,7 @@ body {
   border: 8px solid #4a5a4a;
   border-radius: 10px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  user-select: none; /* 防止文字被选中 */
 }
 
 .game-main {
@@ -571,6 +588,8 @@ body {
   justify-content: center;
   touch-action: manipulation;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  user-select: none; /* 防止文字被选中 */
+  -webkit-touch-callout: none; /* 防止iOS长按菜单 */
 }
 
 #dropBtn {
