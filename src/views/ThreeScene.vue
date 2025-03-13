@@ -13,7 +13,11 @@
         <div class="joystick-handle" ref="joystickHandle"></div>
       </div>
     </div>
-    <div class="controls" :class="{ expanded: isControlsExpanded }" v-show="false">
+    <div
+      class="controls"
+      :class="{ expanded: isControlsExpanded }"
+      v-show="false"
+    >
       <button class="toggle-btn" @click="toggleControls">
         {{ isControlsExpanded ? "收起" : "展开" }}
       </button>
@@ -125,6 +129,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { onMounted, onBeforeUnmount, ref, watch, reactive } from "vue";
 
 // 控制面板展开状态
@@ -314,7 +319,7 @@ const joystickState = reactive({
 });
 
 // 游戏相关变量
-const gameState = ref('idle'); // idle, countdown, playing, gameover
+const gameState = ref("idle"); // idle, countdown, playing, gameover
 const score = ref(0);
 const countdownValue = ref(3);
 let countdownTimer = null;
@@ -355,7 +360,7 @@ const isLoading = ref(true);
 function init() {
   // 创建场景前先显示加载提示
   isLoading.value = true;
-  
+
   // 创建场景
   scene = new THREE.Scene();
 
@@ -403,20 +408,20 @@ function init() {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
-  
+
   // 确保没有限制垂直旋转
   controls.minPolarAngle = 0; // 允许向上看到天空
   controls.maxPolarAngle = Math.PI; // 允许向下看到地面
-  
+
   // 设置缩放限制
   controls.minDistance = 2; // 最小缩放距离
   controls.maxDistance = 20; // 最大缩放距离
-  
+
   // 确保启用了所有控制
   controls.enableZoom = true;
   controls.enableRotate = true;
   controls.enablePan = true;
-  
+
   // 设置初始目标点
   controls.target.set(0, 1, 0);
   controls.update();
@@ -437,7 +442,7 @@ function init() {
 
   // 创建游戏UI
   createGameUI();
-  
+
   // 创建开始游戏文字
   createStartText();
 
@@ -455,7 +460,7 @@ function addFloor() {
     roughness: 0.8,
     metalness: 0.2,
     transparent: true,
-    opacity: 0.8
+    opacity: 0.8,
   });
   const plane = new THREE.Mesh(planeGeometry, planeMaterial);
   plane.rotation.x = -Math.PI / 2;
@@ -486,25 +491,29 @@ function addLights() {
 function createCharacter() {
   // 创建加载管理器
   const loadingManager = new THREE.LoadingManager();
-  
+
   loadingManager.onProgress = function (url, loaded, total) {
     console.log("模型加载进度:", Math.round((loaded / total) * 100) + "%");
   };
-  
+
   loadingManager.onLoad = function () {
     // 所有资源加载完成
     setTimeout(() => {
       isLoading.value = false;
     }, 500);
   };
-  
-  // 创建加载器时传入loadingManager
-  const loader = new GLTFLoader(loadingManager);
 
   // 加载RobotExpressive模型
-  loader.setPath("./gltf/");
+  // loader.setPath("./gltf/");
+  // const loader = new GLTFLoader();
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath("./draco/");
+  dracoLoader.setDecoderConfig({ type: "js" });
+  // 创建加载器时传入loadingManager
+  const loader = new GLTFLoader(loadingManager);
+  loader.setDRACOLoader(dracoLoader);
   loader.load(
-    "goodboyrun.glb",
+    "./gltf/goodboyrun.glb",
     function (gltf) {
       character = gltf.scene;
       character.scale.set(1, 1, 1);
@@ -554,26 +563,27 @@ let moveDirection = new THREE.Vector3();
 // 设置动作
 function setAction(action) {
   if (!mixer || !character) return;
-  
+
   // 如果游戏结束，只允许idle动作
-  if (gameState.value === 'gameover' && action !== 'idle') {
-    action = 'idle';
+  if (gameState.value === "gameover" && action !== "idle") {
+    action = "idle";
   }
-  
+
   currentAction = action;
-  isFollowingPath = action === 'walk' || action === 'run' || action === 'armature';
+  isFollowingPath =
+    action === "walk" || action === "run" || action === "armature";
 
   // 根据动作设置移动速度
   switch (action) {
-    case 'walk':
+    case "walk":
       moveSpeed = 0.5;
       break;
-    case 'run':
-    case 'armature':
+    case "run":
+    case "armature":
       moveSpeed = 0.02;
       break;
-    case 'jump':
-    case 'idle':
+    case "jump":
+    case "idle":
     default:
       moveSpeed = 0;
       isFollowingPath = false;
@@ -583,24 +593,24 @@ function setAction(action) {
   // 映射动作名称到模型的动画名称
   let clipName;
   switch (action) {
-    case 'walk':
-      clipName = 'walking';
+    case "walk":
+      clipName = "walking";
       break;
-    case 'run':
-      clipName = 'running';
+    case "run":
+      clipName = "running";
       break;
-    case 'jump':
-      clipName = 'jump';
+    case "jump":
+      clipName = "jump";
       break;
-    case 'armature':
-      clipName = 'armature';
+    case "armature":
+      clipName = "armature";
       break;
-    case 'idle':
+    case "idle":
     default:
-      clipName = 'idle';
+      clipName = "idle";
       break;
   }
-  
+
   // 获取动画剪辑
   const clip = animations[clipName];
   if (!clip) {
@@ -626,14 +636,14 @@ function setAction(action) {
 // 停止动画
 function stopAnimation() {
   if (!mixer || !character) return;
-  
+
   // 停止所有动画
   if (activeAction) {
     activeAction.fadeOut(0.5);
     activeAction.stop();
     activeAction = null;
   }
-  
+
   // 重置移动状态
   moveSpeed = 0;
   isFollowingPath = false;
@@ -661,29 +671,29 @@ function updateCharacterColor() {
 // 修复摇杆控制功能
 function initJoystick() {
   const container = joystickContainer.value;
-  const handle = container.querySelector('.joystick-handle');
-  
+  const handle = container.querySelector(".joystick-handle");
+
   if (!container || !handle) return;
-  
+
   // 计算摇杆基础位置
   const rect = container.getBoundingClientRect();
   joystickState.baseX = rect.width / 2;
   joystickState.baseY = rect.height / 2;
-  
+
   // 设置手柄初始位置
   joystickState.handleX = joystickState.baseX;
   joystickState.handleY = joystickState.baseY;
   updateJoystickPosition();
-  
+
   // 添加鼠标事件监听
-  container.addEventListener('mousedown', startJoystick);
-  document.addEventListener('mousemove', moveJoystick);
-  document.addEventListener('mouseup', endJoystick);
-  
+  container.addEventListener("mousedown", startJoystick);
+  document.addEventListener("mousemove", moveJoystick);
+  document.addEventListener("mouseup", endJoystick);
+
   // 添加触摸事件监听
-  container.addEventListener('touchstart', startJoystick);
-  document.addEventListener('touchmove', moveJoystick);
-  document.addEventListener('touchend', endJoystick);
+  container.addEventListener("touchstart", startJoystick);
+  document.addEventListener("touchmove", moveJoystick);
+  document.addEventListener("touchend", endJoystick);
 }
 
 // 开始控制摇杆
@@ -695,39 +705,39 @@ function startJoystick(event) {
 // 移动摇杆
 function moveJoystick(event) {
   if (!joystickState.active) return;
-  
+
   event.preventDefault();
-  
+
   // 获取触摸/鼠标位置
   const clientX = event.clientX || (event.touches && event.touches[0].clientX);
   const clientY = event.clientY || (event.touches && event.touches[0].clientY);
-  
+
   if (clientX === undefined || clientY === undefined) return;
-  
+
   const rect = joystickContainer.value.getBoundingClientRect();
   const relativeX = clientX - rect.left;
   const relativeY = clientY - rect.top;
-  
+
   // 计算摇杆移动向量
   let moveX = relativeX - joystickState.baseX;
   let moveY = relativeY - joystickState.baseY;
-  
+
   // 计算移动距离
   const distance = Math.sqrt(moveX * moveX + moveY * moveY);
-  
+
   // 限制摇杆移动范围
   if (distance > joystickState.maxDistance) {
     const angle = Math.atan2(moveY, moveX);
     moveX = Math.cos(angle) * joystickState.maxDistance;
     moveY = Math.sin(angle) * joystickState.maxDistance;
   }
-  
+
   // 更新摇杆位置
   joystickState.handleX = joystickState.baseX + moveX;
   joystickState.handleY = joystickState.baseY + moveY;
   joystickState.moveX = moveX;
   joystickState.moveY = moveY;
-  
+
   updateJoystickPosition();
   updateCharacterMovement();
 }
@@ -738,7 +748,7 @@ function endJoystick() {
   joystickState.active = false;
   joystickState.moveX = 0;
   joystickState.moveY = 0;
-  
+
   // 重置摇杆位置
   joystickState.handleX = joystickState.baseX;
   joystickState.handleY = joystickState.baseY;
@@ -750,48 +760,56 @@ function endJoystick() {
 // 更新摇杆位置
 function updateJoystickPosition() {
   if (!joystickHandle.value) return;
-  
-  joystickHandle.value.style.transform = `translate(${joystickState.handleX - joystickState.baseX}px, ${joystickState.handleY - joystickState.baseY}px)`;
+
+  joystickHandle.value.style.transform = `translate(${
+    joystickState.handleX - joystickState.baseX
+  }px, ${joystickState.handleY - joystickState.baseY}px)`;
 }
 
 // 更新角色移动 - 修改为使用相机方向
 function updateCharacterMovement() {
   if (!character) return;
-  
+
   // 计算移动方向和速度
-  const moveVector = new THREE.Vector2(joystickState.moveX, joystickState.moveY);
+  const moveVector = new THREE.Vector2(
+    joystickState.moveX,
+    joystickState.moveY
+  );
   const moveDistance = moveVector.length();
-  
+
   if (moveDistance > 0) {
     // 设置移动速度（根据摇杆偏移量调整）
-    moveSpeed = moveDistance / joystickState.maxDistance * 0.02;
-    
+    moveSpeed = (moveDistance / joystickState.maxDistance) * 0.02;
+
     // 创建一个表示摇杆方向的向量（屏幕空间）
-    const joystickDirection = new THREE.Vector2(joystickState.moveX, -joystickState.moveY).normalize();
-    
+    const joystickDirection = new THREE.Vector2(
+      joystickState.moveX,
+      -joystickState.moveY
+    ).normalize();
+
     // 创建一个表示"向前"的三维向量
     const forward = new THREE.Vector3(0, 0, -1);
-    
+
     // 将这个向量应用相机的旋转
     forward.applyQuaternion(camera.quaternion);
     forward.y = 0; // 我们只关心水平方向
     forward.normalize();
-    
+
     // 创建一个表示"向右"的三维向量
     const right = new THREE.Vector3(1, 0, 0);
     right.applyQuaternion(camera.quaternion);
     right.y = 0; // 我们只关心水平方向
     right.normalize();
-    
+
     // 根据摇杆方向计算最终移动方向
     moveDirection.copy(forward.multiplyScalar(joystickDirection.y));
     moveDirection.add(right.multiplyScalar(joystickDirection.x));
     moveDirection.normalize();
-    
+
     // 设置角色朝向
     const targetAngle = Math.atan2(moveDirection.x, moveDirection.z);
     character.rotation.y = targetAngle;
-    
+
     // 如果角色当前不在移动状态，切换到奔跑动画
     if (currentAction !== "armature" && currentAction !== "run") {
       setAction("armature");
@@ -799,7 +817,7 @@ function updateCharacterMovement() {
   } else {
     // 停止移动
     moveSpeed = 0;
-    
+
     // 如果角色当前在移动状态，切换到待机动画
     if (currentAction === "armature" || currentAction === "run") {
       setAction("idle");
@@ -874,7 +892,9 @@ function updateCharacterOnPath() {
   // 更新角色位置
   direction.normalize();
   const moveAmount = moveSpeed * 0.05;
-  const targetPosition = character.position.clone().add(direction.multiplyScalar(moveAmount));
+  const targetPosition = character.position
+    .clone()
+    .add(direction.multiplyScalar(moveAmount));
   targetPosition.y = 0.6; // 保持y轴位置固定
   character.position.copy(targetPosition);
 
@@ -882,10 +902,11 @@ function updateCharacterOnPath() {
   const targetRotation = Math.atan2(direction.x, direction.z);
   const currentRotation = character.rotation.y;
   const rotationDiff = targetRotation - currentRotation;
-  
+
   // 确保旋转角度在-π到π之间
-  const normalizedRotationDiff = ((rotationDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
-  
+  const normalizedRotationDiff =
+    ((rotationDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+
   // 平滑插值旋转
   character.rotation.y += normalizedRotationDiff * 0.1;
 }
@@ -893,41 +914,41 @@ function updateCharacterOnPath() {
 // 创建游戏UI
 function createGameUI() {
   // 创建HTML分数显示
-  const scoreDiv = document.createElement('div');
-  scoreDiv.id = 'score-display';
-  scoreDiv.style.position = 'absolute';
-  scoreDiv.style.top = '20px';
-  scoreDiv.style.left = '50%';
-  scoreDiv.style.transform = 'translateX(-50%)';
-  scoreDiv.style.padding = '10px 20px';
-  scoreDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-  scoreDiv.style.color = 'white';
-  scoreDiv.style.borderRadius = '10px';
-  scoreDiv.style.fontSize = '24px';
-  scoreDiv.style.fontWeight = 'bold';
-  scoreDiv.style.zIndex = '100';
-  scoreDiv.style.textAlign = 'center';
-  scoreDiv.style.fontFamily = 'Arial, sans-serif';
-  scoreDiv.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.3)';
-  scoreDiv.innerHTML = '分数: 0';
-  
+  const scoreDiv = document.createElement("div");
+  scoreDiv.id = "score-display";
+  scoreDiv.style.position = "absolute";
+  scoreDiv.style.top = "20px";
+  scoreDiv.style.left = "50%";
+  scoreDiv.style.transform = "translateX(-50%)";
+  scoreDiv.style.padding = "10px 20px";
+  scoreDiv.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+  scoreDiv.style.color = "white";
+  scoreDiv.style.borderRadius = "10px";
+  scoreDiv.style.fontSize = "24px";
+  scoreDiv.style.fontWeight = "bold";
+  scoreDiv.style.zIndex = "100";
+  scoreDiv.style.textAlign = "center";
+  scoreDiv.style.fontFamily = "Arial, sans-serif";
+  scoreDiv.style.boxShadow = "0 0 10px rgba(255, 255, 255, 0.3)";
+  scoreDiv.innerHTML = "分数: 0";
+
   // 将分数显示添加到容器
-  const container = document.getElementById('scene-container');
+  const container = document.getElementById("scene-container");
   container.parentNode.appendChild(scoreDiv);
-  
+
   // 创建倒计时显示
-  const countdownCanvas = document.createElement('canvas');
+  const countdownCanvas = document.createElement("canvas");
   countdownCanvas.width = 256;
   countdownCanvas.height = 256;
-  const countdownContext = countdownCanvas.getContext('2d');
-  
+  const countdownContext = countdownCanvas.getContext("2d");
+
   // 创建纹理
   const countdownTexture = new THREE.CanvasTexture(countdownCanvas);
   const countdownMaterial = new THREE.MeshBasicMaterial({
     map: countdownTexture,
-    transparent: true
+    transparent: true,
   });
-  
+
   // 创建平面几何体
   const countdownGeometry = new THREE.PlaneGeometry(3, 3);
   countdownText = new THREE.Mesh(countdownGeometry, countdownMaterial);
@@ -938,16 +959,18 @@ function createGameUI() {
 
 // 修改updateScoreDisplay函数，更新HTML分数显示
 function updateScoreDisplay() {
-  const scoreDiv = document.getElementById('score-display');
+  const scoreDiv = document.getElementById("score-display");
   if (!scoreDiv) return;
-  
+
   let scoreHtml = `分数: ${score.value}`;
-  
+
   // 如果有道具效果，显示剩余时间
   if (hasPowerup.value) {
-    scoreHtml += `<br><span style="color: #ffcc00; font-size: 18px;">双倍积分: ${Math.ceil(powerupTimeLeft.value)}秒</span>`;
+    scoreHtml += `<br><span style="color: #ffcc00; font-size: 18px;">双倍积分: ${Math.ceil(
+      powerupTimeLeft.value
+    )}秒</span>`;
   }
-  
+
   scoreDiv.innerHTML = scoreHtml;
 }
 
@@ -960,27 +983,27 @@ function createPowerup() {
     metalness: 0.8,
     roughness: 0.2,
     emissive: 0xffcc00,
-    emissiveIntensity: 0.4
+    emissiveIntensity: 0.4,
   });
-  
+
   const powerup = new THREE.Mesh(geometry, material);
-  
+
   // 随机位置
   const randomX = Math.random() * 8 - 4;
   const randomZ = Math.random() * 8 - 4;
-  
+
   powerup.position.set(randomX, 10, randomZ);
   powerup.name = "powerup";
-  
+
   // 添加点光源使其发光
   const light = new THREE.PointLight(0xffcc00, 0.5, 1);
   light.position.set(0, 0, 0);
   powerup.add(light);
-  
+
   // 添加到场景和数组
   scene.add(powerup);
   powerups.push(powerup);
-  
+
   return powerup;
 }
 
@@ -990,110 +1013,110 @@ function showPointsAnimation(points, position) {
   const vector = new THREE.Vector3();
   vector.copy(position);
   vector.project(camera);
-  
+
   const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
   const y = (-(vector.y * 0.5) + 0.5) * window.innerHeight;
-  
+
   // 创建HTML元素
-  const pointsDiv = document.createElement('div');
-  pointsDiv.style.position = 'absolute';
+  const pointsDiv = document.createElement("div");
+  pointsDiv.style.position = "absolute";
   pointsDiv.style.left = `${x}px`;
   pointsDiv.style.top = `${y}px`;
-  pointsDiv.style.transform = 'translate(-50%, -50%)';
-  pointsDiv.style.color = points > 0 ? '#ffff00' : '#ff0000';
-  pointsDiv.style.fontSize = '24px';
-  pointsDiv.style.fontWeight = 'bold';
-  pointsDiv.style.textShadow = '0 0 5px rgba(0, 0, 0, 0.8)';
-  pointsDiv.style.zIndex = '101';
-  pointsDiv.style.pointerEvents = 'none';
-  pointsDiv.style.fontFamily = 'Arial, sans-serif';
-  pointsDiv.innerHTML = `${points > 0 ? '+' : ''}${points}`;
-  
+  pointsDiv.style.transform = "translate(-50%, -50%)";
+  pointsDiv.style.color = points > 0 ? "#ffff00" : "#ff0000";
+  pointsDiv.style.fontSize = "24px";
+  pointsDiv.style.fontWeight = "bold";
+  pointsDiv.style.textShadow = "0 0 5px rgba(0, 0, 0, 0.8)";
+  pointsDiv.style.zIndex = "101";
+  pointsDiv.style.pointerEvents = "none";
+  pointsDiv.style.fontFamily = "Arial, sans-serif";
+  pointsDiv.innerHTML = `${points > 0 ? "+" : ""}${points}`;
+
   document.body.appendChild(pointsDiv);
-  
+
   // 动画效果
   let animationTime = 0;
   const animate = () => {
     animationTime += 0.05;
-    
+
     // 上升并淡出
     const newY = parseFloat(pointsDiv.style.top) - 2;
     pointsDiv.style.top = `${newY}px`;
     pointsDiv.style.opacity = 1 - animationTime / 1.5;
-    
+
     if (animationTime < 1.5) {
       requestAnimationFrame(animate);
     } else {
       document.body.removeChild(pointsDiv);
     }
   };
-  
+
   animate();
 }
 
 // 修改createStartText函数，优化文字样式
 function createStartText() {
   // 创建画布
-  const canvas = document.createElement('canvas');
+  const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 256;
-  const context = canvas.getContext('2d');
-  
+  const context = canvas.getContext("2d");
+
   // 设置渐变背景
   const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
-  gradient.addColorStop(0, '#4CAF50');
-  gradient.addColorStop(1, '#45a049');
-  
+  gradient.addColorStop(0, "#4CAF50");
+  gradient.addColorStop(1, "#45a049");
+
   // 设置文本样式
   context.fillStyle = gradient;
-  context.font = 'bold 72px Arial';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  
+  context.font = "bold 72px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+
   // 添加文字阴影
-  context.shadowColor = 'rgba(0, 0, 0, 0.5)';
+  context.shadowColor = "rgba(0, 0, 0, 0.5)";
   context.shadowBlur = 15;
   context.shadowOffsetX = 5;
   context.shadowOffsetY = 5;
-  
+
   // 绘制文字描边
-  context.strokeStyle = '#ffffff';
+  context.strokeStyle = "#ffffff";
   context.lineWidth = 8;
-  context.strokeText('开始游戏', canvas.width / 2, canvas.height / 2);
-  
+  context.strokeText("开始游戏", canvas.width / 2, canvas.height / 2);
+
   // 绘制文字
-  context.fillText('开始游戏', canvas.width / 2, canvas.height / 2);
-  
+  context.fillText("开始游戏", canvas.width / 2, canvas.height / 2);
+
   // 创建纹理
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
-    side: THREE.DoubleSide
+    side: THREE.DoubleSide,
   });
-  
+
   // 创建平面几何体
   const geometry = new THREE.PlaneGeometry(3, 1.5);
   startText = new THREE.Mesh(geometry, material);
-  
+
   // 放置在角色前方
   startText.position.set(0, 1.2, -2);
   startText.name = "startText";
-  
+
   // 添加发光效果
   const glowMaterial = new THREE.MeshBasicMaterial({
-    color: 0x4CAF50,
+    color: 0x4caf50,
     transparent: true,
     opacity: 0.3,
-    side: THREE.DoubleSide
+    side: THREE.DoubleSide,
   });
   const glowGeometry = new THREE.PlaneGeometry(3.2, 1.7);
   const glow = new THREE.Mesh(glowGeometry, glowMaterial);
   glow.position.set(0, 0, -0.1);
   startText.add(glow);
-  
+
   scene.add(startText);
-  
+
   // 添加动画效果
   const animate = () => {
     if (!startText) return;
@@ -1106,29 +1129,29 @@ function createStartText() {
 
 // 开始游戏倒计时
 function startGameCountdown() {
-  if (gameState.value !== 'idle') return;
-  
+  if (gameState.value !== "idle") return;
+
   // 移除开始文字
   if (startText) {
     scene.remove(startText);
     startText = null;
   }
-  
+
   // 设置游戏状态为倒计时
-  gameState.value = 'countdown';
+  gameState.value = "countdown";
   countdownValue.value = 3;
-  
+
   // 显示倒计时
   if (countdownText) {
     countdownText.visible = true;
     updateCountdownDisplay();
   }
-  
+
   // 开始倒计时
   countdownTimer = setInterval(() => {
     countdownValue.value--;
     updateCountdownDisplay();
-    
+
     if (countdownValue.value <= 0) {
       // 倒计时结束
       clearInterval(countdownTimer);
@@ -1143,16 +1166,16 @@ function startGameCountdown() {
 // 开始游戏
 function startGame() {
   // 设置游戏状态为游戏中
-  gameState.value = 'playing';
+  gameState.value = "playing";
   score.value = 0;
   updateScoreDisplay();
-  
+
   // 清空所有物品
   clearAllItems();
-  
+
   // 游戏开始时只生成一个金币
   createCoin();
-  
+
   // 更新分数显示
   updateScoreDisplay();
 }
@@ -1160,39 +1183,39 @@ function startGame() {
 // 结束游戏
 function endGame() {
   // 设置游戏状态为游戏结束
-  gameState.value = 'gameover';
-  
+  gameState.value = "gameover";
+
   // 显示游戏结束文字
-  const gameOverDiv = document.createElement('div');
-  gameOverDiv.id = 'game-over';
-  gameOverDiv.style.position = 'absolute';
-  gameOverDiv.style.top = '50%';
-  gameOverDiv.style.left = '50%';
-  gameOverDiv.style.transform = 'translate(-50%, -50%)';
-  gameOverDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-  gameOverDiv.style.color = 'white';
-  gameOverDiv.style.padding = '20px';
-  gameOverDiv.style.borderRadius = '10px';
-  gameOverDiv.style.textAlign = 'center';
-  gameOverDiv.style.zIndex = '102';
-  gameOverDiv.style.fontFamily = 'Arial, sans-serif';
+  const gameOverDiv = document.createElement("div");
+  gameOverDiv.id = "game-over";
+  gameOverDiv.style.position = "absolute";
+  gameOverDiv.style.top = "50%";
+  gameOverDiv.style.left = "50%";
+  gameOverDiv.style.transform = "translate(-50%, -50%)";
+  gameOverDiv.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+  gameOverDiv.style.color = "white";
+  gameOverDiv.style.padding = "20px";
+  gameOverDiv.style.borderRadius = "10px";
+  gameOverDiv.style.textAlign = "center";
+  gameOverDiv.style.zIndex = "102";
+  gameOverDiv.style.fontFamily = "Arial, sans-serif";
   gameOverDiv.innerHTML = `
     <h2 style="color: #ff0000; margin-bottom: 10px;">游戏结束</h2>
     <p style="font-size: 20px; margin-bottom: 20px;">最终分数: ${score.value}</p>
     <button id="restart-btn" style="padding: 10px 20px; background-color: #4caf50; color: white; border: none; border-radius: 5px; cursor: pointer;">重新开始</button>
   `;
-  
+
   document.body.appendChild(gameOverDiv);
-  
+
   // 添加重新开始按钮事件
-  document.getElementById('restart-btn').addEventListener('click', () => {
+  document.getElementById("restart-btn").addEventListener("click", () => {
     document.body.removeChild(gameOverDiv);
     resetGame();
   });
-  
+
   // 3秒后自动重置游戏
   setTimeout(() => {
-    if (document.getElementById('game-over')) {
+    if (document.getElementById("game-over")) {
       document.body.removeChild(gameOverDiv);
     }
     resetGame();
@@ -1202,15 +1225,15 @@ function endGame() {
 // 重置游戏
 function resetGame() {
   // 重置游戏状态
-  gameState.value = 'idle';
+  gameState.value = "idle";
   score.value = 0;
-  
+
   // 清空所有物品
   clearAllItems();
-  
+
   // 重新创建开始游戏文字
   createStartText();
-  
+
   // 更新分数显示
   updateScoreDisplay();
 }
@@ -1222,19 +1245,19 @@ function clearAllItems() {
     scene.remove(coins[i]);
   }
   coins = [];
-  
+
   // 移除所有炸弹
   for (let i = bombs.length - 1; i >= 0; i--) {
     scene.remove(bombs[i]);
   }
   bombs = [];
-  
+
   // 移除所有金色发光球
   for (let i = powerups.length - 1; i >= 0; i--) {
     scene.remove(powerups[i]);
   }
   powerups = [];
-  
+
   // 停用道具效果
   if (hasPowerup.value) {
     deactivatePowerup();
@@ -1250,23 +1273,23 @@ function createCoin() {
     metalness: 1,
     roughness: 0.3,
     emissive: 0xffff00,
-    emissiveIntensity: 0.2
+    emissiveIntensity: 0.2,
   });
-  
+
   const coin = new THREE.Mesh(geometry, material);
-  
+
   // 随机位置 - 缩小范围
   const randomX = Math.random() * 8 - 4; // -4 到 4
   const randomZ = Math.random() * 8 - 4; // -4 到 4
-  
+
   coin.position.set(randomX, 10, randomZ); // 从高处掉落
   coin.rotation.x = Math.PI / 2; // 平放
   coin.name = "coin";
-  
+
   // 添加到场景和数组
   scene.add(coin);
   coins.push(coin);
-  
+
   return coin;
 }
 
@@ -1277,39 +1300,39 @@ function createBomb() {
   const material = new THREE.MeshStandardMaterial({
     color: 0x000000,
     metalness: 0.7,
-    roughness: 0.2
+    roughness: 0.2,
   });
-  
+
   const bomb = new THREE.Mesh(geometry, material);
-  
+
   // 随机位置 - 缩小范围
   const randomX = Math.random() * 8 - 4; // -4 到 4
   const randomZ = Math.random() * 8 - 4; // -4 到 4
-  
+
   bomb.position.set(randomX, 10, randomZ); // 从高处掉落
   bomb.name = "bomb";
-  
+
   // 添加到场景和数组
   scene.add(bomb);
   bombs.push(bomb);
-  
+
   // 添加引线和火花
   const fuseGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 8);
   const fuseMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
   const fuse = new THREE.Mesh(fuseGeometry, fuseMaterial);
   fuse.position.y = 0.35;
   bomb.add(fuse);
-  
+
   const sparkGeometry = new THREE.SphereGeometry(0.05, 16, 16);
   const sparkMaterial = new THREE.MeshStandardMaterial({
     color: 0xff0000,
     emissive: 0xff5500,
-    emissiveIntensity: 1
+    emissiveIntensity: 1,
   });
   const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
   spark.position.y = 0.6;
   bomb.add(spark);
-  
+
   return bomb;
 }
 
@@ -1319,22 +1342,22 @@ function activatePowerup() {
   if (powerupTimer) {
     clearInterval(powerupTimer);
   }
-  
+
   // 设置道具状态
   hasPowerup.value = true;
   powerupTimeLeft.value = powerupDuration / 1000;
-  
+
   // 记录原始移动速度并提升速度
   if (moveSpeed > 0) {
     originalMoveSpeed = moveSpeed;
     moveSpeed += powerupSpeedBoost;
   }
-  
+
   // 开始倒计时
   powerupTimer = setInterval(() => {
     powerupTimeLeft.value -= 0.1;
     updateScoreDisplay();
-    
+
     // 道具效果结束
     if (powerupTimeLeft.value <= 0) {
       deactivatePowerup();
@@ -1347,120 +1370,126 @@ function deactivatePowerup() {
   hasPowerup.value = false;
   clearInterval(powerupTimer);
   powerupTimer = null;
-  
+
   // 恢复原始移动速度
   if (originalMoveSpeed > 0) {
     moveSpeed = originalMoveSpeed;
     originalMoveSpeed = 0;
   }
-  
+
   updateScoreDisplay();
 }
 
 // 修改updateItems函数，添加金色发光球的更新和生成逻辑
 function updateItems() {
   const gravity = 0.05;
-  
+
   // 更新金币
   for (let i = coins.length - 1; i >= 0; i--) {
     const coin = coins[i];
-    
+
     // 应用重力
     coin.position.y -= gravity;
-    
+
     // 旋转金币
     coin.rotation.z += 0.02;
-    
+
     // 检查是否落地
     if (coin.position.y <= 0.3) {
       coin.position.y = 0.3;
     }
-    
+
     // 检查与角色的碰撞
     if (character && checkCollision(character, coin)) {
       // 碰撞到金币
       scene.remove(coin);
       coins.splice(i, 1);
-      
+
       // 增加分数，如果有道具效果则加倍
       const pointsToAdd = hasPowerup.value ? coinValue * 2 : coinValue;
       score.value += pointsToAdd;
-      
+
       // 显示得分动画
       showPointsAnimation(pointsToAdd, coin.position);
-      
+
       updateScoreDisplay();
     }
   }
-  
+
   // 更新炸弹
   for (let i = bombs.length - 1; i >= 0; i--) {
     const bomb = bombs[i];
-    
+
     // 应用重力
     bomb.position.y -= gravity;
-    
+
     // 检查是否落地
     if (bomb.position.y <= 0.3) {
       bomb.position.y = 0.3;
     }
-    
+
     // 检查与角色的碰撞
     if (character && checkCollision(character, bomb)) {
       // 碰撞到炸弹
       scene.remove(bomb);
       bombs.splice(i, 1);
-      
+
       // 减少分数
       score.value += bombValue;
       updateScoreDisplay();
-      
+
       // 检查游戏结束条件
       if (score.value < 0) {
         endGame();
       }
     }
   }
-  
+
   // 新增：更新金色发光球
   for (let i = powerups.length - 1; i >= 0; i--) {
     const powerup = powerups[i];
-    
+
     // 应用重力
     powerup.position.y -= gravity;
-    
+
     // 旋转道具，使其看起来更有活力
     powerup.rotation.y += 0.03;
     powerup.rotation.x += 0.01;
-    
+
     // 检查是否落地
     if (powerup.position.y <= 0.3) {
       powerup.position.y = 0.3;
     }
-    
+
     // 检查与角色的碰撞
     if (character && checkCollision(character, powerup)) {
       // 碰撞到金色发光球
       scene.remove(powerup);
       powerups.splice(i, 1);
-      
+
       // 激活道具效果
       activatePowerup();
     }
   }
-  
+
   // 定时生成新物品
   const currentTime = Date.now();
-  if (gameState.value === 'playing' && currentTime - lastDropTime > itemDropInterval) {
+  if (
+    gameState.value === "playing" &&
+    currentTime - lastDropTime > itemDropInterval
+  ) {
     lastDropTime = currentTime;
-    
+
     // 随机决定生成什么物品
     const rand = Math.random();
-    if (rand < 0.7) { // 70%概率生成金币，提高金币概率
+    if (rand < 0.7) {
+      // 70%概率生成金币，提高金币概率
       createCoin();
-    } else if (rand < 0.95) { // 25%概率生成炸弹，降低炸弹概率
+    } else if (rand < 0.95) {
+      // 25%概率生成炸弹，降低炸弹概率
       createBomb();
-    } else { // 5%概率生成金色发光球，降低道具概率
+    } else {
+      // 5%概率生成金色发光球，降低道具概率
       createPowerup();
     }
   }
@@ -1471,34 +1500,34 @@ function checkCollision(object1, object2) {
   // 简单的球体碰撞检测
   const position1 = object1.position;
   const position2 = object2.position;
-  
+
   // 计算距离
   const dx = position1.x - position2.x;
   const dy = position1.y - position2.y;
   const dz = position1.z - position2.z;
   const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  
+
   // 碰撞距离阈值
   const collisionThreshold = 0.8;
-  
+
   return distance < collisionThreshold;
 }
 
 // 修改animate函数，确保角色不会跑出屏幕
 function animate() {
   animationFrameId = requestAnimationFrame(animate);
-  
+
   // 更新控制器
   controls.update();
-  
+
   // 更新雨滴
   updateRain();
-  
+
   // 更新游戏物品
-  if (gameState.value === 'playing') {
+  if (gameState.value === "playing") {
     updateItems();
   }
-  
+
   // 更新动画混合器
   const currentTime = Date.now();
   if (prevTime && mixer) {
@@ -1506,31 +1535,40 @@ function animate() {
     mixer.update(delta);
   }
   prevTime = currentTime;
-  
+
   // 更新角色位置
   if (moveSpeed > 0 && character) {
-    const newPosition = character.position.clone().add(
-      moveDirection.clone().multiplyScalar(moveSpeed)
-    );
-    
+    const newPosition = character.position
+      .clone()
+      .add(moveDirection.clone().multiplyScalar(moveSpeed));
+
     // 边界限制
-    newPosition.x = THREE.MathUtils.clamp(newPosition.x, -moveBoundary, moveBoundary);
-    newPosition.z = THREE.MathUtils.clamp(newPosition.z, -moveBoundary, moveBoundary);
-    
+    newPosition.x = THREE.MathUtils.clamp(
+      newPosition.x,
+      -moveBoundary,
+      moveBoundary
+    );
+    newPosition.z = THREE.MathUtils.clamp(
+      newPosition.z,
+      -moveBoundary,
+      moveBoundary
+    );
+
     character.position.copy(newPosition);
-    
+
     // 检查是否碰到开始游戏文字
-    if (startText && gameState.value === 'idle') {
+    if (startText && gameState.value === "idle") {
       const dx = character.position.x - startText.position.x;
       const dz = character.position.z - startText.position.z;
       const distance = Math.sqrt(dx * dx + dz * dz);
-      
-      if (distance < 1) { // 减小触发距离
+
+      if (distance < 1) {
+        // 减小触发距离
         startGameCountdown();
       }
     }
   }
-  
+
   // 渲染场景
   renderer.render(scene, camera);
 }
@@ -1538,22 +1576,26 @@ function animate() {
 // 添加缺失的updateCountdownDisplay函数
 function updateCountdownDisplay() {
   if (!countdownText) return;
-  
+
   const canvas = countdownText.material.map.image;
-  const context = canvas.getContext('2d');
-  
+  const context = canvas.getContext("2d");
+
   // 清除画布
   context.clearRect(0, 0, canvas.width, canvas.height);
-  
+
   // 设置文本样式
-  context.fillStyle = '#ff0000';
-  context.font = 'bold 120px Arial';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  
+  context.fillStyle = "#ff0000";
+  context.font = "bold 120px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+
   // 绘制倒计时
-  context.fillText(`${countdownValue.value}`, canvas.width / 2, canvas.height / 2);
-  
+  context.fillText(
+    `${countdownValue.value}`,
+    canvas.width / 2,
+    canvas.height / 2
+  );
+
   // 更新纹理
   countdownText.material.map.needsUpdate = true;
 }
@@ -1570,16 +1612,16 @@ onMounted(() => {
 onBeforeUnmount(() => {
   // 移除事件监听器
   window.removeEventListener("resize", handleResize);
-  
+
   // 移除摇杆事件监听
   if (joystickContainer.value) {
-    joystickContainer.value.removeEventListener('mousedown', startJoystick);
-    joystickContainer.value.removeEventListener('touchstart', startJoystick);
+    joystickContainer.value.removeEventListener("mousedown", startJoystick);
+    joystickContainer.value.removeEventListener("touchstart", startJoystick);
   }
-  document.removeEventListener('mousemove', moveJoystick);
-  document.removeEventListener('mouseup', endJoystick);
-  document.removeEventListener('touchmove', moveJoystick);
-  document.removeEventListener('touchend', endJoystick);
+  document.removeEventListener("mousemove", moveJoystick);
+  document.removeEventListener("mouseup", endJoystick);
+  document.removeEventListener("touchmove", moveJoystick);
+  document.removeEventListener("touchend", endJoystick);
 
   // 停止动画循环
   if (animationFrameId) {
@@ -1597,7 +1639,7 @@ onBeforeUnmount(() => {
   }
 
   // 移除HTML分数显示
-  const scoreDiv = document.getElementById('score-display');
+  const scoreDiv = document.getElementById("score-display");
   if (scoreDiv) {
     scoreDiv.parentNode.removeChild(scoreDiv);
   }
@@ -1774,7 +1816,7 @@ input[type="color"] {
     width: 120px;
     height: 120px;
   }
-  
+
   .joystick-handle {
     width: 50px;
     height: 50px;
@@ -1804,7 +1846,7 @@ input[type="color"] {
   width: 50px;
   height: 50px;
   border: 5px solid #f3f3f3;
-  border-top: 5px solid #4CAF50;
+  border-top: 5px solid #4caf50;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 20px;
@@ -1817,7 +1859,11 @@ input[type="color"] {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 </style>
