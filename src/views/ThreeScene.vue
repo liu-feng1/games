@@ -16,18 +16,27 @@
     <div
       class="controls"
       :class="{ expanded: isControlsExpanded }"
-      v-show="false"
     >
       <button class="toggle-btn" @click="toggleControls">
         {{ isControlsExpanded ? "收起" : "展开" }}
       </button>
       <div class="controls-content">
-        <div class="control-group">
+        <!-- <div class="control-group">
           <h3>人物控制</h3>
           <button @click="setAction('armature')">奔跑</button>
           <button @click="stopAnimation">停止</button>
-        </div>
+        </div> -->
         <div class="control-group">
+          <h3>速度设置</h3>
+          <div class="speed-options">
+            <button @click="setSpeed('verySlow')" :class="{ active: currentSpeed === 'verySlow' }">极慢</button>
+            <button @click="setSpeed('slow')" :class="{ active: currentSpeed === 'slow' }">慢</button>
+            <button @click="setSpeed('medium')" :class="{ active: currentSpeed === 'medium' }">适中</button>
+            <button @click="setSpeed('fast')" :class="{ active: currentSpeed === 'fast' }">快</button>
+            <button @click="setSpeed('veryFast')" :class="{ active: currentSpeed === 'veryFast' }">极快</button>
+          </div>
+        </div>
+        <!-- <div class="control-group">
           <h3>颜色修改</h3>
           <div class="color-picker">
             <label for="character-color">人物颜色:</label>
@@ -102,7 +111,7 @@
             <input type="range" v-model="exposure" min="0" max="2" step="0.1" />
             <span>{{ exposure }}</span>
           </div>
-        </div>
+        </div> -->
         <div class="control-group">
           <h3>雨天效果</h3>
           <button @click="toggleRain">
@@ -136,6 +145,15 @@ import { onMounted, onBeforeUnmount, ref, watch, reactive } from "vue";
 const isControlsExpanded = ref(false);
 // 人物颜色
 const characterColor = ref("#3366ff");
+// 速度设置
+const currentSpeed = ref('medium');
+const speedValues = {
+  verySlow: 0.005,
+  slow: 0.01,
+  medium: 0.02,
+  fast: 0.03,
+  veryFast: 0.04
+};
 
 // 光源控制参数
 const ambientLightIntensity = ref(0.7);
@@ -355,6 +373,361 @@ let isFollowingPath = false;
 
 // 添加加载状态变量
 const isLoading = ref(true);
+
+// 添加道具存在时间相关变量
+const itemLifespan = 10000; // 道具存在时间(毫秒)
+
+// 添加粒子系统相关变量
+function createDisappearEffect(position, color) {
+  // 创建粒子几何体
+  const particleCount = 30;
+  const particleGeometry = new THREE.BufferGeometry();
+  const particlePositions = new Float32Array(particleCount * 3);
+  const particleSizes = new Float32Array(particleCount);
+  const particleVelocities = [];
+
+  // 初始化粒子位置和大小
+  for (let i = 0; i < particleCount; i++) {
+    // 所有粒子从物体中心开始
+    particlePositions[i * 3] = position.x;
+    particlePositions[i * 3 + 1] = position.y;
+    particlePositions[i * 3 + 2] = position.z;
+    
+    // 随机大小
+    particleSizes[i] = Math.random() * 0.1 + 0.05;
+    
+    // 随机速度向量
+    particleVelocities.push(new THREE.Vector3(
+      (Math.random() - 0.5) * 0.1,
+      Math.random() * 0.1,
+      (Math.random() - 0.5) * 0.1
+    ));
+  }
+
+  particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+  particleGeometry.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+
+  // 创建粒子材质
+  const particleMaterial = new THREE.PointsMaterial({
+    color: color,
+    size: 0.1,
+    transparent: true,
+    opacity: 1,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true
+  });
+
+  // 创建粒子系统
+  const particles = new THREE.Points(particleGeometry, particleMaterial);
+  scene.add(particles);
+
+  // 粒子动画
+  let animationFrame;
+  const animateParticles = () => {
+    const positions = particles.geometry.attributes.position.array;
+    
+    // 更新每个粒子的位置
+    for (let i = 0; i < particleCount; i++) {
+      positions[i * 3] += particleVelocities[i].x;
+      positions[i * 3 + 1] += particleVelocities[i].y;
+      positions[i * 3 + 2] += particleVelocities[i].z;
+      
+      // 添加重力效果
+      particleVelocities[i].y -= 0.002;
+    }
+    
+    particles.geometry.attributes.position.needsUpdate = true;
+    
+    // 淡出效果
+    particleMaterial.opacity -= 0.02;
+    
+    if (particleMaterial.opacity > 0) {
+      animationFrame = requestAnimationFrame(animateParticles);
+    } else {
+      // 动画结束，移除粒子系统
+      scene.remove(particles);
+      cancelAnimationFrame(animationFrame);
+      particles.geometry.dispose();
+      particleMaterial.dispose();
+    }
+  };
+  
+  // 开始动画
+  animateParticles();
+}
+
+// 添加大便道具相关变量
+let poopItems = []; // 大便道具数组
+const poopPenaltyDuration = 5000; // 大便惩罚持续时间(毫秒)
+const hasPoop = ref(false); // 是否有大便效果
+const poopTimeLeft = ref(0); // 大便效果剩余时间
+let poopTimer = null; // 大便效果计时器
+let poopEffect = null; // 大便效果粒子系统
+
+// 创建大便道具函数
+function createPoop() {
+  // 创建大便基础形状（使用多个球体组合）
+  const poopGroup = new THREE.Group();
+  
+  // 底部大球
+  const base = new THREE.Mesh(
+    new THREE.SphereGeometry(0.3, 16, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0x6b4423,
+      roughness: 0.8,
+      metalness: 0.1
+    })
+  );
+  base.position.y = 0;
+  poopGroup.add(base);
+  
+  // 中间球
+  const middle = new THREE.Mesh(
+    new THREE.SphereGeometry(0.25, 16, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0x6b4423,
+      roughness: 0.8,
+      metalness: 0.1
+    })
+  );
+  middle.position.y = 0.25;
+  poopGroup.add(middle);
+  
+  // 顶部小球
+  const top = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 16, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0x6b4423,
+      roughness: 0.8,
+      metalness: 0.1
+    })
+  );
+  top.position.y = 0.45;
+  poopGroup.add(top);
+  
+  // 添加眼睛（可选）
+  const eyeGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  
+  const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+  leftEye.position.set(-0.1, 0.45, 0.15);
+  poopGroup.add(leftEye);
+  
+  const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+  rightEye.position.set(0.1, 0.45, 0.15);
+  poopGroup.add(rightEye);
+  
+  // 添加瞳孔
+  const pupilGeometry = new THREE.SphereGeometry(0.02, 8, 8);
+  const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  
+  const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+  leftPupil.position.set(-0.1, 0.45, 0.19);
+  poopGroup.add(leftPupil);
+  
+  const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+  rightPupil.position.set(0.1, 0.45, 0.19);
+  poopGroup.add(rightPupil);
+  
+  // 添加微笑
+  const smileGeometry = new THREE.TorusGeometry(0.08, 0.02, 8, 12, Math.PI);
+  const smileMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const smile = new THREE.Mesh(smileGeometry, smileMaterial);
+  smile.position.set(0, 0.35, 0.18);
+  smile.rotation.x = -Math.PI / 2;
+  smile.rotation.z = Math.PI;
+  poopGroup.add(smile);
+  
+  // 尝试最多10次找到一个无碰撞的位置
+  let attempts = 0;
+  let validPosition = false;
+  let randomX, randomZ;
+  
+  while (!validPosition && attempts < 10) {
+    // 随机位置
+    randomX = Math.random() * 8 - 4;
+    randomZ = Math.random() * 8 - 4;
+    
+    // 检查这个位置是否与其他道具碰撞
+    const tempPosition = new THREE.Vector3(randomX, 0, randomZ);
+    if (!checkItemCollision(tempPosition, "poop")) {
+      validPosition = true;
+    }
+    
+    attempts++;
+  }
+  
+  poopGroup.position.set(randomX, 10, randomZ); // 从高处掉落
+  poopGroup.name = "poop";
+  poopGroup.userData.createdAt = Date.now(); // 记录创建时间
+  
+  // 添加到场景和数组
+  scene.add(poopGroup);
+  poopItems.push(poopGroup);
+  
+  return poopGroup;
+}
+
+// 修改checkItemCollision函数，添加对大便道具的检测
+function checkItemCollision(position, itemType) {
+  // 检查与现有金币的碰撞
+  for (const coin of coins) {
+    const dx = position.x - coin.position.x;
+    const dz = position.z - coin.position.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+    
+    // 如果距离太近，返回true表示有碰撞
+    if (distance < 1.0) {
+      return true;
+    }
+  }
+  
+  // 检查与现有炸弹的碰撞
+  for (const bomb of bombs) {
+    const dx = position.x - bomb.position.x;
+    const dz = position.z - bomb.position.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+    
+    if (distance < 1.0) {
+      return true;
+    }
+  }
+  
+  // 检查与现有金色发光球的碰撞
+  for (const powerup of powerups) {
+    const dx = position.x - powerup.position.x;
+    const dz = position.z - powerup.position.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+    
+    if (distance < 1.0) {
+      return true;
+    }
+  }
+  
+  // 检查与现有大便道具的碰撞
+  for (const poop of poopItems) {
+    const dx = position.x - poop.position.x;
+    const dz = position.z - poop.position.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+    
+    if (distance < 1.0) {
+      return true;
+    }
+  }
+  
+  // 没有碰撞
+  return false;
+}
+
+// 创建大便效果粒子系统
+function createPoopEffect() {
+  if (poopEffect) {
+    scene.remove(poopEffect);
+  }
+  
+  // 创建粒子几何体
+  const particleCount = 20;
+  const particleGeometry = new THREE.BufferGeometry();
+  const particlePositions = new Float32Array(particleCount * 3);
+  
+  // 初始化粒子位置
+  for (let i = 0; i < particleCount; i++) {
+    particlePositions[i * 3] = (Math.random() - 0.5) * 0.5;
+    particlePositions[i * 3 + 1] = Math.random() * 0.5 + 0.5;
+    particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+  }
+  
+  particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+  
+  // 创建粒子材质
+  const particleMaterial = new THREE.PointsMaterial({
+    color: 0x6b4423,
+    size: 0.1,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true
+  });
+  
+  // 创建粒子系统
+  poopEffect = new THREE.Points(particleGeometry, particleMaterial);
+  
+  // 将粒子系统添加到角色上
+  if (character) {
+    character.add(poopEffect);
+  }
+  
+  // 动画更新函数
+  const updatePoopEffect = () => {
+    if (!poopEffect || !hasPoop.value) return;
+    
+    const positions = poopEffect.geometry.attributes.position.array;
+    
+    for (let i = 0; i < particleCount; i++) {
+      // 粒子上升
+      positions[i * 3 + 1] += 0.02;
+      
+      // 如果粒子上升太高，重置到底部
+      if (positions[i * 3 + 1] > 2) {
+        positions[i * 3 + 1] = 0.5;
+        positions[i * 3] = (Math.random() - 0.5) * 0.5;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+      }
+    }
+    
+    poopEffect.geometry.attributes.position.needsUpdate = true;
+  };
+  
+  // 添加到动画循环
+  const originalAnimate = animate;
+  animate = function() {
+    originalAnimate();
+    updatePoopEffect();
+  };
+}
+
+// 添加激活大便效果函数
+function activatePoopPenalty() {
+  // 如果已经有大便效果，先清除之前的计时器
+  if (poopTimer) {
+    clearInterval(poopTimer);
+  }
+  
+  // 设置大便状态
+  hasPoop.value = true;
+  poopTimeLeft.value = poopPenaltyDuration / 1000;
+  
+  // 创建大便效果粒子系统
+  createPoopEffect();
+  
+  // 开始倒计时
+  poopTimer = setInterval(() => {
+    poopTimeLeft.value -= 0.1;
+    updateScoreDisplay();
+    
+    // 大便效果结束
+    if (poopTimeLeft.value <= 0) {
+      deactivatePoopPenalty();
+    }
+  }, 100);
+}
+
+// 添加停用大便效果函数
+function deactivatePoopPenalty() {
+  hasPoop.value = false;
+  clearInterval(poopTimer);
+  poopTimer = null;
+  
+  // 移除大便效果粒子系统
+  if (poopEffect && character) {
+    character.remove(poopEffect);
+    poopEffect.geometry.dispose();
+    poopEffect.material.dispose();
+    poopEffect = null;
+  }
+  
+  updateScoreDisplay();
+}
 
 // 初始化场景
 function init() {
@@ -778,8 +1151,8 @@ function updateCharacterMovement() {
   const moveDistance = moveVector.length();
 
   if (moveDistance > 0) {
-    // 设置移动速度（根据摇杆偏移量调整）
-    moveSpeed = (moveDistance / joystickState.maxDistance) * 0.02;
+    // 设置移动速度（根据摇杆偏移量和当前选择的速度调整）
+    moveSpeed = (moveDistance / joystickState.maxDistance) * speedValues[currentSpeed.value];
 
     // 创建一个表示摇杆方向的向量（屏幕空间）
     const joystickDirection = new THREE.Vector2(
@@ -957,7 +1330,7 @@ function createGameUI() {
   scene.add(countdownText);
 }
 
-// 修改updateScoreDisplay函数，更新HTML分数显示
+// 修改updateScoreDisplay函数，添加大便效果显示
 function updateScoreDisplay() {
   const scoreDiv = document.getElementById("score-display");
   if (!scoreDiv) return;
@@ -970,11 +1343,123 @@ function updateScoreDisplay() {
       powerupTimeLeft.value
     )}秒</span>`;
   }
+  
+  // 如果有大便效果，显示剩余时间
+  if (hasPoop.value) {
+    scoreHtml += `<br><span style="color: blue; font-size: 18px;">臭臭效果: ${Math.ceil(
+      poopTimeLeft.value
+    )}秒</span>`;
+  }
 
   scoreDiv.innerHTML = scoreHtml;
 }
 
-// 修改createPowerup函数，优化发光小金球
+// 修改createCoin函数，添加碰撞检测
+function createCoin() {
+  // 创建金币几何体
+  const geometry = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 32);
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffff00,
+    metalness: 1,
+    roughness: 0.3,
+    emissive: 0xffff00,
+    emissiveIntensity: 0.2,
+  });
+
+  const coin = new THREE.Mesh(geometry, material);
+
+  // 尝试最多10次找到一个无碰撞的位置
+  let attempts = 0;
+  let validPosition = false;
+  let randomX, randomZ;
+  
+  while (!validPosition && attempts < 10) {
+    // 随机位置 - 缩小范围
+    randomX = Math.random() * 8 - 4; // -4 到 4
+    randomZ = Math.random() * 8 - 4; // -4 到 4
+    
+    // 检查这个位置是否与其他道具碰撞
+    const tempPosition = new THREE.Vector3(randomX, 0, randomZ);
+    if (!checkItemCollision(tempPosition, "coin")) {
+      validPosition = true;
+    }
+    
+    attempts++;
+  }
+  
+  // 如果找不到无碰撞的位置，就使用最后一次尝试的位置
+  coin.position.set(randomX, 10, randomZ); // 从高处掉落
+  coin.rotation.x = Math.PI / 2; // 平放
+  coin.name = "coin";
+  coin.userData.createdAt = Date.now(); // 记录创建时间
+
+  // 添加到场景和数组
+  scene.add(coin);
+  coins.push(coin);
+
+  return coin;
+}
+
+// 修改createBomb函数，添加碰撞检测
+function createBomb() {
+  // 创建炸弹几何体
+  const geometry = new THREE.SphereGeometry(0.3, 32, 32);
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x000000,
+    metalness: 0.7,
+    roughness: 0.2,
+  });
+
+  const bomb = new THREE.Mesh(geometry, material);
+
+  // 尝试最多10次找到一个无碰撞的位置
+  let attempts = 0;
+  let validPosition = false;
+  let randomX, randomZ;
+  
+  while (!validPosition && attempts < 10) {
+    // 随机位置 - 缩小范围
+    randomX = Math.random() * 8 - 4; // -4 到 4
+    randomZ = Math.random() * 8 - 4; // -4 到 4
+    
+    // 检查这个位置是否与其他道具碰撞
+    const tempPosition = new THREE.Vector3(randomX, 0, randomZ);
+    if (!checkItemCollision(tempPosition, "bomb")) {
+      validPosition = true;
+    }
+    
+    attempts++;
+  }
+
+  bomb.position.set(randomX, 10, randomZ); // 从高处掉落
+  bomb.name = "bomb";
+  bomb.userData.createdAt = Date.now(); // 记录创建时间
+
+  // 添加到场景和数组
+  scene.add(bomb);
+  bombs.push(bomb);
+
+  // 添加引线和火花
+  const fuseGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 8);
+  const fuseMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
+  const fuse = new THREE.Mesh(fuseGeometry, fuseMaterial);
+  fuse.position.y = 0.35;
+  bomb.add(fuse);
+
+  const sparkGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+  const sparkMaterial = new THREE.MeshStandardMaterial({
+    color: 0xff0000,
+    emissive: 0xff5500,
+    emissiveIntensity: 1,
+  });
+  const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
+  spark.position.y = 0.6;
+  bomb.add(spark);
+
+  return bomb;
+}
+
+// 修改createPowerup函数，添加碰撞检测
 function createPowerup() {
   // 创建金色发光球几何体 - 缩小一点
   const geometry = new THREE.SphereGeometry(0.25, 32, 32);
@@ -988,12 +1473,28 @@ function createPowerup() {
 
   const powerup = new THREE.Mesh(geometry, material);
 
-  // 随机位置
-  const randomX = Math.random() * 8 - 4;
-  const randomZ = Math.random() * 8 - 4;
+  // 尝试最多10次找到一个无碰撞的位置
+  let attempts = 0;
+  let validPosition = false;
+  let randomX, randomZ;
+  
+  while (!validPosition && attempts < 10) {
+    // 随机位置
+    randomX = Math.random() * 8 - 4;
+    randomZ = Math.random() * 8 - 4;
+    
+    // 检查这个位置是否与其他道具碰撞
+    const tempPosition = new THREE.Vector3(randomX, 0, randomZ);
+    if (!checkItemCollision(tempPosition, "powerup")) {
+      validPosition = true;
+    }
+    
+    attempts++;
+  }
 
   powerup.position.set(randomX, 10, randomZ);
   powerup.name = "powerup";
+  powerup.userData.createdAt = Date.now(); // 记录创建时间
 
   // 添加点光源使其发光
   const light = new THREE.PointLight(0xffcc00, 0.5, 1);
@@ -1013,7 +1514,6 @@ function showPointsAnimation(points, position) {
   const vector = new THREE.Vector3();
   vector.copy(position);
   vector.project(camera);
-
   const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
   const y = (-(vector.y * 0.5) + 0.5) * window.innerHeight;
 
@@ -1257,136 +1757,41 @@ function clearAllItems() {
     scene.remove(powerups[i]);
   }
   powerups = [];
+  
+  // 移除所有大便道具
+  for (let i = poopItems.length - 1; i >= 0; i--) {
+    scene.remove(poopItems[i]);
+  }
+  poopItems = [];
 
   // 停用道具效果
   if (hasPowerup.value) {
     deactivatePowerup();
   }
-}
-
-// 修改createCoin函数，缩小生成范围
-function createCoin() {
-  // 创建金币几何体
-  const geometry = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 32);
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xffff00,
-    metalness: 1,
-    roughness: 0.3,
-    emissive: 0xffff00,
-    emissiveIntensity: 0.2,
-  });
-
-  const coin = new THREE.Mesh(geometry, material);
-
-  // 随机位置 - 缩小范围
-  const randomX = Math.random() * 8 - 4; // -4 到 4
-  const randomZ = Math.random() * 8 - 4; // -4 到 4
-
-  coin.position.set(randomX, 10, randomZ); // 从高处掉落
-  coin.rotation.x = Math.PI / 2; // 平放
-  coin.name = "coin";
-
-  // 添加到场景和数组
-  scene.add(coin);
-  coins.push(coin);
-
-  return coin;
-}
-
-// 修改createBomb函数，缩小生成范围
-function createBomb() {
-  // 创建炸弹几何体
-  const geometry = new THREE.SphereGeometry(0.3, 32, 32);
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x000000,
-    metalness: 0.7,
-    roughness: 0.2,
-  });
-
-  const bomb = new THREE.Mesh(geometry, material);
-
-  // 随机位置 - 缩小范围
-  const randomX = Math.random() * 8 - 4; // -4 到 4
-  const randomZ = Math.random() * 8 - 4; // -4 到 4
-
-  bomb.position.set(randomX, 10, randomZ); // 从高处掉落
-  bomb.name = "bomb";
-
-  // 添加到场景和数组
-  scene.add(bomb);
-  bombs.push(bomb);
-
-  // 添加引线和火花
-  const fuseGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 8);
-  const fuseMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
-  const fuse = new THREE.Mesh(fuseGeometry, fuseMaterial);
-  fuse.position.y = 0.35;
-  bomb.add(fuse);
-
-  const sparkGeometry = new THREE.SphereGeometry(0.05, 16, 16);
-  const sparkMaterial = new THREE.MeshStandardMaterial({
-    color: 0xff0000,
-    emissive: 0xff5500,
-    emissiveIntensity: 1,
-  });
-  const spark = new THREE.Mesh(sparkGeometry, sparkMaterial);
-  spark.position.y = 0.6;
-  bomb.add(spark);
-
-  return bomb;
-}
-
-// 新增：激活道具效果
-function activatePowerup() {
-  // 如果已经有道具效果，先清除之前的计时器
-  if (powerupTimer) {
-    clearInterval(powerupTimer);
+  
+  // 停用大便效果
+  if (hasPoop.value) {
+    deactivatePoopPenalty();
   }
-
-  // 设置道具状态
-  hasPowerup.value = true;
-  powerupTimeLeft.value = powerupDuration / 1000;
-
-  // 记录原始移动速度并提升速度
-  if (moveSpeed > 0) {
-    originalMoveSpeed = moveSpeed;
-    moveSpeed += powerupSpeedBoost;
-  }
-
-  // 开始倒计时
-  powerupTimer = setInterval(() => {
-    powerupTimeLeft.value -= 0.1;
-    updateScoreDisplay();
-
-    // 道具效果结束
-    if (powerupTimeLeft.value <= 0) {
-      deactivatePowerup();
-    }
-  }, 100);
 }
 
-// 新增：停用道具效果
-function deactivatePowerup() {
-  hasPowerup.value = false;
-  clearInterval(powerupTimer);
-  powerupTimer = null;
-
-  // 恢复原始移动速度
-  if (originalMoveSpeed > 0) {
-    moveSpeed = originalMoveSpeed;
-    originalMoveSpeed = 0;
-  }
-
-  updateScoreDisplay();
-}
-
-// 修改updateItems函数，添加金色发光球的更新和生成逻辑
+// 修改updateItems函数，添加大便道具的更新
 function updateItems() {
   const gravity = 0.05;
+  const currentTime = Date.now();
 
   // 更新金币
   for (let i = coins.length - 1; i >= 0; i--) {
     const coin = coins[i];
+
+    // 检查存在时间
+    if (currentTime - coin.userData.createdAt > itemLifespan) {
+      // 超过10秒，创建消失效果并移除金币
+      createDisappearEffect(coin.position.clone(), 0xffff00);
+      scene.remove(coin);
+      coins.splice(i, 1);
+      continue;
+    }
 
     // 应用重力
     coin.position.y -= gravity;
@@ -1401,16 +1806,23 @@ function updateItems() {
 
     // 检查与角色的碰撞
     if (character && checkCollision(character, coin)) {
-      // 碰撞到金币
+      // 碰撞到金币，创建消失效果
+      createDisappearEffect(coin.position.clone(), 0xffff00);
       scene.remove(coin);
       coins.splice(i, 1);
 
-      // 增加分数，如果有道具效果则加倍
-      const pointsToAdd = hasPowerup.value ? coinValue * 2 : coinValue;
-      score.value += pointsToAdd;
+      // 如果有大便效果，不增加分数
+      if (!hasPoop.value) {
+        // 增加分数，如果有道具效果则加倍
+        const pointsToAdd = hasPowerup.value ? coinValue * 2 : coinValue;
+        score.value += pointsToAdd;
 
-      // 显示得分动画
-      showPointsAnimation(pointsToAdd, coin.position);
+        // 显示得分动画
+        showPointsAnimation(pointsToAdd, coin.position);
+      } else {
+        // 显示无法得分提示
+        showPointsAnimation("臭臭中!", coin.position, 0x6b4423);
+      }
 
       updateScoreDisplay();
     }
@@ -1419,6 +1831,15 @@ function updateItems() {
   // 更新炸弹
   for (let i = bombs.length - 1; i >= 0; i--) {
     const bomb = bombs[i];
+
+    // 检查存在时间
+    if (currentTime - bomb.userData.createdAt > itemLifespan) {
+      // 超过10秒，创建消失效果并移除炸弹
+      createDisappearEffect(bomb.position.clone(), 0xff0000);
+      scene.remove(bomb);
+      bombs.splice(i, 1);
+      continue;
+    }
 
     // 应用重力
     bomb.position.y -= gravity;
@@ -1430,7 +1851,8 @@ function updateItems() {
 
     // 检查与角色的碰撞
     if (character && checkCollision(character, bomb)) {
-      // 碰撞到炸弹
+      // 碰撞到炸弹，创建消失效果
+      createDisappearEffect(bomb.position.clone(), 0xff0000);
       scene.remove(bomb);
       bombs.splice(i, 1);
 
@@ -1449,6 +1871,15 @@ function updateItems() {
   for (let i = powerups.length - 1; i >= 0; i--) {
     const powerup = powerups[i];
 
+    // 检查存在时间
+    if (currentTime - powerup.userData.createdAt > itemLifespan) {
+      // 超过10秒，创建消失效果并移除金色发光球
+      createDisappearEffect(powerup.position.clone(), 0xffcc00);
+      scene.remove(powerup);
+      powerups.splice(i, 1);
+      continue;
+    }
+
     // 应用重力
     powerup.position.y -= gravity;
 
@@ -1463,7 +1894,8 @@ function updateItems() {
 
     // 检查与角色的碰撞
     if (character && checkCollision(character, powerup)) {
-      // 碰撞到金色发光球
+      // 碰撞到金色发光球，创建消失效果
+      createDisappearEffect(powerup.position.clone(), 0xffcc00);
       scene.remove(powerup);
       powerups.splice(i, 1);
 
@@ -1472,8 +1904,46 @@ function updateItems() {
     }
   }
 
+  // 更新大便道具
+  for (let i = poopItems.length - 1; i >= 0; i--) {
+    const poop = poopItems[i];
+    
+    // 检查存在时间
+    if (currentTime - poop.userData.createdAt > itemLifespan) {
+      // 超过10秒，创建消失效果并移除大便道具
+      createDisappearEffect(poop.position.clone(), 0x6b4423);
+      scene.remove(poop);
+      poopItems.splice(i, 1);
+      continue;
+    }
+    
+    // 应用重力
+    poop.position.y -= gravity;
+    
+    // 旋转大便道具，使其看起来更有趣
+    poop.rotation.y += 0.02;
+    
+    // 检查是否落地
+    if (poop.position.y <= 0.6) {
+      poop.position.y = 0.6;
+    }
+    
+    // 检查与角色的碰撞
+    if (character && checkCollision(character, poop)) {
+      // 碰撞到大便道具，创建消失效果
+      createDisappearEffect(poop.position.clone(), 0x6b4423);
+      scene.remove(poop);
+      poopItems.splice(i, 1);
+      
+      // 激活大便效果
+      activatePoopPenalty();
+      
+      // 显示提示
+      showPointsAnimation("臭臭!", poop.position, 0x6b4423);
+    }
+  }
+
   // 定时生成新物品
-  const currentTime = Date.now();
   if (
     gameState.value === "playing" &&
     currentTime - lastDropTime > itemDropInterval
@@ -1482,14 +1952,17 @@ function updateItems() {
 
     // 随机决定生成什么物品
     const rand = Math.random();
-    if (rand < 0.7) {
-      // 70%概率生成金币，提高金币概率
+    if (rand < 0.6) {
+      // 70%概率生成金币
       createCoin();
-    } else if (rand < 0.95) {
-      // 25%概率生成炸弹，降低炸弹概率
+    } else if (rand < 0.825) {
+      // 22.5%概率生成炸弹（原来是25%，现在减半）
       createBomb();
+    } else if (rand < 0.95) {
+      // 12.5%概率生成大便道具（替换掉一半的炸弹）
+      createPoop();
     } else {
-      // 5%概率生成金色发光球，降低道具概率
+      // 5%概率生成金色发光球
       createPowerup();
     }
   }
@@ -1600,6 +2073,63 @@ function updateCountdownDisplay() {
   countdownText.material.map.needsUpdate = true;
 }
 
+// 设置移动速度
+function setSpeed(speed) {
+  currentSpeed.value = speed;
+  if (moveSpeed > 0) {
+    // 如果角色正在移动，立即应用新速度
+    moveSpeed = speedValues[speed];
+    // 如果有道具效果，添加速度提升
+    if (hasPowerup.value) {
+      moveSpeed += powerupSpeedBoost;
+    }
+  }
+}
+
+// 新增：激活道具效果
+function activatePowerup() {
+  // 如果已经有道具效果，先清除之前的计时器
+  if (powerupTimer) {
+    clearInterval(powerupTimer);
+  }
+
+  // 设置道具状态
+  hasPowerup.value = true;
+  powerupTimeLeft.value = powerupDuration / 1000;
+
+  // 记录原始移动速度并提升速度
+  if (moveSpeed > 0) {
+    originalMoveSpeed = moveSpeed;
+    moveSpeed += powerupSpeedBoost;
+  }
+
+  // 开始倒计时
+  powerupTimer = setInterval(() => {
+    powerupTimeLeft.value -= 0.1;
+    updateScoreDisplay();
+
+    // 道具效果结束
+    if (powerupTimeLeft.value <= 0) {
+      deactivatePowerup();
+    }
+  }, 100);
+}
+
+// 新增：停用道具效果
+function deactivatePowerup() {
+  hasPowerup.value = false;
+  clearInterval(powerupTimer);
+  powerupTimer = null;
+
+  // 恢复原始移动速度
+  if (originalMoveSpeed > 0) {
+    moveSpeed = originalMoveSpeed;
+    originalMoveSpeed = 0;
+  }
+
+  updateScoreDisplay();
+}
+
 // 组件挂载后初始化
 onMounted(() => {
   init();
@@ -1637,6 +2167,11 @@ onBeforeUnmount(() => {
   if (powerupTimer) {
     clearInterval(powerupTimer);
   }
+  
+  // 清理大便效果计时器
+  if (poopTimer) {
+    clearInterval(poopTimer);
+  }
 
   // 移除HTML分数显示
   const scoreDiv = document.getElementById("score-display");
@@ -1645,7 +2180,6 @@ onBeforeUnmount(() => {
   }
 });
 </script>
-
 <style scoped>
 .container {
   display: flex;
@@ -1866,4 +2400,24 @@ input[type="color"] {
     transform: rotate(360deg);
   }
 }
+
+.speed-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.speed-options button {
+  flex: 1 0 calc(50% - 5px);
+  margin-bottom: 5px;
+  background-color: #555;
+}
+
+.speed-options button.active {
+  background-color: #4caf50;
+  box-shadow: 0 0 5px rgba(76, 175, 80, 0.8);
+}
 </style>
+
+
